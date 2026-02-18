@@ -1,0 +1,16 @@
+{
+  "name": "api",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx tsx watch src/local.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.26.3",
+    "@types/aws-lambda": "^8.10.147"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "simple-sabotage",
+  "private": true,
+  "workspaces": ["frontend", "api", "infra"],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "build:frontend": "npm run build -w frontend",
+    "build:api": "npm run build -w api",
+    "build:infra": "npm run build -w infra",
+    "dev": "npm run dev -w frontend",
+    "deploy": "npm run build && cd infra && npx cdk deploy --require-approval never"
+  }
+}
