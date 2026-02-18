@@ -86,6 +86,14 @@ export class SimpleSabotageStack extends cdk.Stack {
       },
     });
 
+    // Rate limiting: 5 requests/sec sustained, 10 burst
+    const stage = httpApi.defaultStage!.node
+      .defaultChild as apigwv2.CfnStage;
+    stage.defaultRouteSettings = {
+      throttlingBurstLimit: 10,
+      throttlingRateLimit: 5,
+    };
+
     httpApi.addRoutes({
       path: "/analyze",
       methods: [apigwv2.HttpMethod.POST],
@@ -144,6 +152,7 @@ export class SimpleSabotageStack extends cdk.Stack {
       distribution,
       distributionPaths: ["/index.html"],
       contentType: "text/html; charset=utf-8",
+      prune: false,
     });
 
     // Deploy JS assets

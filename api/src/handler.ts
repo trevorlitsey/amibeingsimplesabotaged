@@ -54,8 +54,19 @@ Important:
 export async function handler(
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyResultV2> {
+  const ALLOWED_ORIGINS = new Set([
+    "https://amibeingsimplesabotaged.com",
+    "https://www.amibeingsimplesabotaged.com",
+    "http://localhost:5173",
+  ]);
+
+  const origin = event.headers?.origin || "";
+  const corsOrigin = ALLOWED_ORIGINS.has(origin)
+    ? origin
+    : "https://amibeingsimplesabotaged.com";
+
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": corsOrigin,
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
