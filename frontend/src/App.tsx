@@ -112,7 +112,7 @@ function App() {
           <div className="flex items-center gap-3 mb-2">
             <div className="w-2 h-2 bg-classified-amber rounded-full animate-pulse" />
             <span className="text-classified-amber font-mono text-xs tracking-[0.3em] uppercase">
-              Simple Sabotage Analysis Tool
+              Hey, something is not right
             </span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-mono font-bold text-white leading-tight">
