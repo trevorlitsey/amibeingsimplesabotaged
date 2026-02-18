@@ -21,7 +21,7 @@ export function InputSection({ onSubmit, loading }: InputSectionProps) {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Describe what's happening at work... For example: 'My manager insists every decision go through three levels of approval, holds meetings when we have deadlines, and keeps reopening decisions we already made.'"
+          placeholder="Describe what's happening to you... For example: 'My manager insists every decision go through three levels of approval, holds meetings when we have deadlines, and keeps reopening decisions we already made.'"
           rows={6}
           maxLength={10000}
           disabled={loading}
