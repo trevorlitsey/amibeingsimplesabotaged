@@ -9,27 +9,25 @@ import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import * as apigwv2Integrations from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
-import * as route53 from "aws-cdk-lib/aws-route53";
-import * as route53Targets from "aws-cdk-lib/aws-route53-targets";
 import { Construct } from "constructs";
 import * as path from "path";
 
-const DOMAIN_NAME = "amibeingsimplesabotaged.com";
+const DOMAIN_NAME = "amibeingsimplesabotaged.trevorlitsey.com";
+
+export interface SimpleSabotageStackProps extends cdk.StackProps {
+  certificateArn: string;
+}
 
 export class SimpleSabotageStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: SimpleSabotageStackProps) {
     super(scope, id, props);
 
-    // --- DNS & Certificate ---
-    const hostedZone = route53.HostedZone.fromLookup(this, "HostedZone", {
-      domainName: DOMAIN_NAME,
-    });
-
-    const certificate = new acm.Certificate(this, "Certificate", {
-      domainName: DOMAIN_NAME,
-      subjectAlternativeNames: [`www.${DOMAIN_NAME}`],
-      validation: acm.CertificateValidation.fromDns(hostedZone),
-    });
+    // --- Certificate (issued out-of-band, validated via Netlify-managed DNS) ---
+    const certificate = acm.Certificate.fromCertificateArn(
+      this,
+      "Certificate",
+      props.certificateArn
+    );
 
     // --- S3 Bucket for Frontend ---
     const siteBucket = new s3.Bucket(this, "SiteBucket", {
@@ -51,13 +49,15 @@ export class SimpleSabotageStack extends cdk.Stack {
       },
     });
 
-    // Grant Lambda permission to invoke Claude via Bedrock (cross-region inference profile)
+    // Grant Lambda permission to invoke Llama 3.3 70B via Bedrock (cross-region inference profile)
     apiFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel"],
         resources: [
-          `arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0`,
-          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
+          `arn:aws:bedrock:*::foundation-model/meta.llama3-3-70b-instruct-v1:0`,
+          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.meta.llama3-3-70b-instruct-v1:0`,
+          `arn:aws:bedrock:us-east-2:${this.account}:inference-profile/us.meta.llama3-3-70b-instruct-v1:0`,
+          `arn:aws:bedrock:us-west-2:${this.account}:inference-profile/us.meta.llama3-3-70b-instruct-v1:0`,
         ],
       })
     );
@@ -78,7 +78,6 @@ export class SimpleSabotageStack extends cdk.Stack {
       corsPreflight: {
         allowOrigins: [
           `https://${DOMAIN_NAME}`,
-          `https://www.${DOMAIN_NAME}`,
           "http://localhost:5173",
         ],
         allowMethods: [apigwv2.CorsHttpMethod.POST, apigwv2.CorsHttpMethod.OPTIONS],
@@ -105,7 +104,7 @@ export class SimpleSabotageStack extends cdk.Stack {
 
     // --- CloudFront Distribution ---
     const distribution = new cloudfront.Distribution(this, "Distribution", {
-      domainNames: [DOMAIN_NAME, `www.${DOMAIN_NAME}`],
+      domainNames: [DOMAIN_NAME],
       certificate,
       defaultRootObject: "index.html",
       defaultBehavior: {
@@ -183,22 +182,6 @@ export class SimpleSabotageStack extends cdk.Stack {
       contentType: "text/css; charset=utf-8",
     });
 
-    // --- Route 53 Records ---
-    new route53.ARecord(this, "ARecord", {
-      zone: hostedZone,
-      target: route53.RecordTarget.fromAlias(
-        new route53Targets.CloudFrontTarget(distribution)
-      ),
-    });
-
-    new route53.ARecord(this, "WwwARecord", {
-      zone: hostedZone,
-      recordName: "www",
-      target: route53.RecordTarget.fromAlias(
-        new route53Targets.CloudFrontTarget(distribution)
-      ),
-    });
-
     // --- Outputs ---
     new cdk.CfnOutput(this, "SiteUrl", {
       value: `https://${DOMAIN_NAME}`,
@@ -210,6 +193,12 @@ export class SimpleSabotageStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, "DistributionId", {
       value: distribution.distributionId,
+    });
+
+    new cdk.CfnOutput(this, "DistributionDomainName", {
+      value: distribution.distributionDomainName,
+      description:
+        "Add a CNAME in Netlify: amibeingsimplesabotaged -> this value",
     });
   }
 }

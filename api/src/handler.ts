@@ -1,13 +1,17 @@
-import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
+import {
+  BedrockRuntimeClient,
+  InvokeModelCommand,
+} from "@aws-sdk/client-bedrock-runtime";
 import {
   APIGatewayProxyEventV2,
   APIGatewayProxyResultV2,
 } from "aws-lambda";
 import { getFullManualText } from "./manual";
 
-const anthropic = new AnthropicBedrock({ awsRegion: "us-east-1" });
+const bedrock = new BedrockRuntimeClient({ region: "us-east-1" });
 
-const MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+// Cross-region inference profile for Llama 3.3 70B (Bedrock requires this prefix for on-demand)
+const MODEL_ID = "us.meta.llama3-3-70b-instruct-v1:0";
 
 const SYSTEM_PROMPT = `You are an expert analyst of workplace dysfunction. Your job is to analyze a user's description of their workplace or life situation and determine whether any of the tactics from the OSS Simple Sabotage Field Manual are being used — intentionally or unintentionally.
 
@@ -51,19 +55,20 @@ Important:
 - Rank matches by relevance (most relevant first).
 - Limit to the top 5 most relevant matches.`;
 
+const ALLOWED_ORIGINS = new Set([
+  "https://amibeingsimplesabotaged.trevorlitsey.com",
+  "https://amibeingsimplesabotaged.com",
+  "https://www.amibeingsimplesabotaged.com",
+  "http://localhost:5173",
+]);
+
 export async function handler(
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyResultV2> {
-  const ALLOWED_ORIGINS = new Set([
-    "https://amibeingsimplesabotaged.com",
-    "https://www.amibeingsimplesabotaged.com",
-    "http://localhost:5173",
-  ]);
-
   const origin = event.headers?.origin || "";
   const corsOrigin = ALLOWED_ORIGINS.has(origin)
     ? origin
-    : "https://amibeingsimplesabotaged.com";
+    : "https://amibeingsimplesabotaged.trevorlitsey.com";
 
   const corsHeaders = {
     "Access-Control-Allow-Origin": corsOrigin,
@@ -111,27 +116,43 @@ export async function handler(
       };
     }
 
-    const message = await anthropic.messages.create({
-      model: MODEL_ID,
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Here's my situation:\n\n${situation}`,
-        },
-      ],
+    // Llama 3 chat template
+    const prompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+${SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+Here's my situation:
+
+${situation}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+`;
+
+    const command = new InvokeModelCommand({
+      modelId: MODEL_ID,
+      contentType: "application/json",
+      accept: "application/json",
+      body: JSON.stringify({
+        prompt,
+        max_gen_len: 2048,
+        temperature: 0.5,
+        top_p: 0.9,
+      }),
     });
 
-    const textContent = message.content.find((c) => c.type === "text");
-    if (!textContent || textContent.type !== "text") {
-      throw new Error("No text response from Claude");
-    }
+    const response = await bedrock.send(command);
+    const payload = JSON.parse(new TextDecoder().decode(response.body));
+    const rawGeneration: string = payload.generation ?? "";
 
     // Strip markdown code fences if present, then parse JSON
-    let rawText = textContent.text.trim();
+    let rawText = rawGeneration.trim();
     if (rawText.startsWith("```")) {
       rawText = rawText.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+    // Llama may include trailing prose after the JSON — try to extract the JSON object
+    const firstBrace = rawText.indexOf("{");
+    const lastBrace = rawText.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      rawText = rawText.slice(firstBrace, lastBrace + 1);
     }
     const analysis = JSON.parse(rawText);
 
